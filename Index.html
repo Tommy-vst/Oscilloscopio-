@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hameg HM404 - Web Audio Oscilloscope</title>
+    <style>
+        :root {
+            --panel-bg: #e0d8cc;
+            --panel-dark: #b8b0a3;
+            --screen-bg: #031408;
+            --screen-trace: #00ff41;
+            --screen-grid: rgba(0, 255, 65, 0.2);
+            --knob-base: #a69f94;
+            --knob-top: #cfc7bc;
+            --text-color: #2b2b2b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        
+        body {
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        /* HARDWARE CHASSIS */
+        .oscilloscope-chassis {
+            background: var(--panel-bg);
+            border: 4px solid var(--panel-dark);
+            border-radius: 10px;
+            box-shadow: 10px 15px 30px rgba(0,0,0,0.7), inset 2px 2px 5px rgba(255,255,255,0.8);
+            display: flex;
+            flex-wrap: wrap;
+            width: 100%;
+            max-width: 900px;
+            padding: 15px;
+            gap: 15px;
+            position: relative;
+        }
+
+        /* BRANDING */
+        .branding {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            text-align: right;
+            color: var(--text-color);
+        }
+        .branding h1 { font-size: 22px; font-weight: 900; letter-spacing: 1px; margin-bottom: 2px; }
+        .branding h2 { font-size: 10px; font-weight: normal; }
+
+        /* SCREEN AREA */
+        .screen-bezel {
+            background: #2a2c2b;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: inset 5px 5px 15px rgba(0,0,0,0.8), 1px 1px 2px rgba(255,255,255,0.5);
+            flex: 1 1 350px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        canvas {
+            background: var(--screen-bg);
+            border-radius: 20px;
+            box-shadow: inset 0 0 20px rgba(0,255,0,0.1);
+            width: 100%;
+            aspect-ratio: 4/3;
+            max-height: 60vh;
+            display: block;
+        }
+
+        /* CONTROLS AREA */
+        .control-panel {
+            flex: 1 1 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding-top: 50px; /* Spazio per branding */
+        }
+
+        .control-group {
+            border: 1px solid rgba(0,0,0,0.1);
+            border-top-color: rgba(255,255,255,0.6);
+            border-left-color: rgba(255,255,255,0.6);
+            padding: 15px;
+            border-radius: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: space-around;
+            position: relative;
+        }
+
+        .group-label {
+            position: absolute;
+            top: -8px;
+            left: 10px;
+            background: var(--panel-bg);
+            padding: 0 5px;
+            font-size: 10px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        /* MANOPOLE (KNOBS) */
+        .knob-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .knob-label { font-size: 10px; font-weight: bold; color: var(--text-color); text-transform: uppercase;}
+
+        .knob {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, var(--knob-top), var(--knob-base));
+            box-shadow: 3px 5px 10px rgba(0,0,0,0.4), inset -1px -2px 5px rgba(0,0,0,0.2);
+            position: relative;
+            cursor: pointer;
+            transform: rotate(-135deg); /* Min value */
+            will-change: transform;
+        }
+
+        /* Indicatore manopola */
+        .knob::after {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 23px;
+            width: 4px;
+            height: 12px;
+            background: #333;
+            border-radius: 2px;
+        }
+
+        /* PULSANTI HARDWARE */
+        .btn-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .hw-btn {
+            background: #b0a99d;
+            border: none;
+            width: 40px;
+            height: 25px;
+            border-radius: 3px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.4), inset 1px 1px 2px rgba(255,255,255,0.6);
+            cursor: pointer;
+            color: #222;
+            font-weight: bold;
+            font-size: 9px;
+            text-transform: uppercase;
+        }
+        .hw-btn:active, .hw-btn.active {
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.6);
+            transform: translate(1px, 1px);
+        }
+
+        .btn-power { background: #d43f3a; color: white; }
+        .btn-record { background: #5cb85c; color: white; display: none; }
+        
+        #audioInput { display: none; }
+        #statusDisplay {
+            font-family: monospace; font-size: 10px; color: var(--text-color);
+            background: rgba(0,0,0,0.05); padding: 5px; border-radius: 3px;
+            width: 100%; text-align: center; border: 1px inset rgba(0,0,0,0.2);
+        }
+
+        @media (max-width: 768px) {
+            .branding { position: relative; right: 0; text-align: center; width: 100%; margin-bottom: -30px; }
+            .control-panel { padding-top: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="oscilloscope-chassis">
+        <div class="branding">
+            <h1>HAMEG</h1>
+            <h2>40MHz ANALOG OSCILLOSCOPE HM404</h2>
+        </div>
+
+        <!-- SCHERMO CRT -->
+        <div class="screen-bezel">
+            <!-- Risoluzione interna standard 4:3 -->
+            <canvas id="crtCanvas" width="800" height="600"></canvas>
+        </div>
+
+        <!-- PANNELLO DI CONTROLLO -->
+        <div class="control-panel">
+            
+            <div class="control-group" style="padding-top: 25px;">
+                <div class="group-label">POWER / DATA</div>
+                <div class="btn-container">
+                    <button class="hw-btn btn-power" id="powerBtn" title="Carica Audio">PWR</button>
+                    <input type="file" id="audioInput" accept="audio/*">
+                    <button class="hw-btn btn-record" id="recordBtn">SAVE</button>
+                    <button class="hw-btn" id="stopBtn" disabled>RECALL</button>
+                </div>
+                <div id="statusDisplay">NO INPUT (AWAITING AUDIO)</div>
+            </div>
+
+            <div class="control-group">
+                <div class="group-label">VERTICAL (Y)</div>
+                
+                <div class="knob-container">
+                    <span class="knob-label">VOLTS/DIV</span>
+                    <!-- Gain: Amplificazione segnale -->
+                    <div class="knob" id="knob-volts" data-min="0.1" data-max="5" data-val="1.5"></div>
+                </div>
+                
+                <div class="knob-container">
+                    <span class="knob-label">Y-POS</span>
+                    <!-- Spostamento Asse Y -->
+                    <div class="knob" id="knob-ypos" data-min="-300" data-max="300" data-val="0"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="group-label">HORIZONTAL / DISPLAY</div>
+                
+                <div class="knob-container">
+                    <span class="knob-label">TIME/DIV</span>
+                    <!-- Frequenza / Zoom asse X -->
+                    <div class="knob" id="knob-time" data-min="0.1" data-max="3" data-val="1"></div>
+                </div>
+
+                <div class="knob-container">
+                    <span class="knob-label">INTENS</span>
+                    <!-- Intensità / Motion Blur -->
+                    <div class="knob" id="knob-intens" data-min="0.05" data-max="0.4" data-val="0.15"></div>
+                </div>
+
+                <div class="knob-container">
+                    <span class="knob-label">FOCUS</span>
+                    <!-- Sfocatura Traccia -->
+                    <div class="knob" id="knob-focus" data-min="0" data-max="15" data-val="3"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // CORE VARIABLES
+        const canvas = document.getElementById('crtCanvas');
+        const ctx = canvas.getContext('2d'); // Rimosso willReadFrequently per usare GPU
+        
+        // OFFSCREEN CANVAS (Ottimizzazione Critica)
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = canvas.width;
+        offscreenCanvas.height = canvas.height;
+        const offCtx = offscreenCanvas.getContext('2d');
+
+        // AUDIO & RECORDING
+        let audioCtx, analyser, source, mediaRecorder;
+        let recordedChunks = [];
+        let isPlaying = false;
+        let isRecording = false;
+        let animationId;
+        
+        // BUFFER PRE-ALLOCATO (No Memory Leak)
+        const bufferLength = 2048; 
+        const dataArray = new Uint8Array(bufferLength);
+
+        // UI ELEMENTS
+        const powerBtn = document.getElementById('powerBtn');
+        const audioInput = document.getElementById('audioInput');
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDisplay = document.getElementById('statusDisplay');
+
+        // PARAMETRI REALI
+        const params = { voltsDiv: 1.5, yPos: 0, timeDiv: 1, intens: 0.15, focus: 3 };
+
+        // 1. GENERAZIONE OFFSCREEN ASSET (Griglia e Vignettatura calcolati 1 sola volta)
+        function generateStaticCRT() {
+            // Sfondo Base
+            offCtx.fillStyle = '#031408';
+            offCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Griglia
+            offCtx.lineWidth = 1;
+            offCtx.strokeStyle = 'rgba(0, 255, 65, 0.2)';
+            offCtx.beginPath();
+            const gridSize = 40;
+            for(let x=0; x<=canvas.width; x+=gridSize){ offCtx.moveTo(x,0); offCtx.lineTo(x,canvas.height); }
+            for(let y=0; y<=canvas.height; y+=gridSize){ offCtx.moveTo(0,y); offCtx.lineTo(canvas.width,y); }
+            offCtx.stroke();
+
+            // Assi Centrali
+            offCtx.lineWidth = 2;
+            offCtx.beginPath();
+            offCtx.moveTo(canvas.width/2, 0); offCtx.lineTo(canvas.width/2, canvas.height);
+            offCtx.moveTo(0, canvas.height/2); offCtx.lineTo(canvas.width, canvas.height/2);
+            offCtx.stroke();
+
+            // Scanlines
+            offCtx.fillStyle = 'rgba(0,0,0,0.15)';
+            for (let i = 0; i < canvas.height; i += 3) {
+                offCtx.fillRect(0, i, canvas.width, 1);
+            }
+
+            // Vignettatura (Hardware Lense)
+            const grad = offCtx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height/3, canvas.width/2, canvas.height/2, canvas.height/1.1);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, 'rgba(0,0,0,0.9)');
+            offCtx.fillStyle = grad;
+            offCtx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        generateStaticCRT();
+        ctx.drawImage(offscreenCanvas, 0, 0); // Primo disegno
+
+        // 2. GESTIONE MANOPOLE (Pointer Events per Touch/Mouse fluidi)
+        function initKnob(knobId, paramKey) {
+            const knob = document.getElementById(knobId);
+            const min = parseFloat(knob.getAttribute('data-min'));
+            const max = parseFloat(knob.getAttribute('data-max'));
+            let currentVal = parseFloat(knob.getAttribute('data-val'));
+            
+            // Map value to -135deg to +135deg
+            const valToAngle = (val) => ((val - min) / (max - min)) * 270 - 135;
+            let currentAngle = valToAngle(currentVal);
+            knob.style.transform = `rotate(${currentAngle}deg)`;
+
+            let isDragging = false;
+
+            knob.addEventListener('pointerdown', (e) => {
+                isDragging = true;
+                knob.setPointerCapture(e.pointerId);
+            });
+
+            knob.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                const rect = knob.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const x = e.clientX - centerX;
+                const y = e.clientY - centerY;
+                
+                let angle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+                if (angle > 180) angle -= 360;
+
+                // Limita rotazione fisica
+                if (angle < -135) angle = -135;
+                if (angle > 135) angle = 135;
+
+                currentAngle = angle;
+                knob.style.transform = `rotate(${currentAngle}deg)`;
+
+                // Applica il valore matematico
+                const normalized = (currentAngle + 135) / 270;
+                params[paramKey] = min + (normalized * (max - min));
+            });
+
+            knob.addEventListener('pointerup', (e) => {
+                isDragging = false;
+                knob.releasePointerCapture(e.pointerId);
+            });
+        }
+
+        initKnob('knob-volts', 'voltsDiv');
+        initKnob('knob-ypos', 'yPos');
+        initKnob('knob-time', 'timeDiv');
+        initKnob('knob-intens', 'intens');
+        initKnob('knob-focus', 'focus');
+
+        // 3. LOGICA AUDIO & MEDIA RECORDER
+        powerBtn.addEventListener('click', () => audioInput.click());
+
+        audioInput.addEventListener('change', () => {
+            if (audioInput.files.length > 0) {
+                statusDisplay.textContent = `READY: ${audioInput.files[0].name.substring(0, 15)}...`;
+                powerBtn.classList.add('active');
+                recordBtn.style.display = 'block';
+            }
+        });
+
+        recordBtn.addEventListener('click', async () => {
+            if (isRecording || isPlaying) return;
+            const file = audioInput.files[0];
+            if (!file) return;
+
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const arrayBuffer = await file.arrayBuffer();
+                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+                source = audioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = bufferLength * 2; 
+
+                const dest = audioCtx.createMediaStreamDestination();
+                source.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                source.connect(dest);
+
+                const canvasStream = canvas.captureStream(30); 
+                const audioStream = dest.stream;
+                
+                const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioStream.getAudioTracks()]);
+                
+                // Ricerca Codec Hardware (Priorità H264 per Safari/Apple)
+                let mimeType = 'video/webm;codecs=vp8';
+                if (MediaRecorder.isTypeSupported('video/mp4;codecs="avc1.42E01E"')) {
+                    mimeType = 'video/mp4;codecs="avc1.42E01E"'; // MP4 Nativo
+                } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+                    mimeType = 'video/webm;codecs=h264';
+                }
+
+                mediaRecorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 2500000 });
+                recordedChunks = [];
+
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+                mediaRecorder.onstop = exportVideo;
+
+                mediaRecorder.start(1000);
+                source.start(0);
+                
+                isPlaying = true;
+                isRecording = true;
+                recordBtn.style.display = 'none';
+                stopBtn.disabled = false;
+                statusDisplay.textContent = "REC (SAVE) IN PROGRESS...";
+                
+                source.onended = stopProcess;
+                renderLoop();
+
+            } catch (err) {
+                statusDisplay.textContent = `ERR: ${err.message.substring(0, 20)}`;
+            }
+        });
+
+        stopBtn.addEventListener('click', stopProcess);
+
+        function stopProcess() {
+            if (isRecording && mediaRecorder.state !== 'inactive') {
+                statusDisplay.textContent = "PROCESSING FILE...";
+                mediaRecorder.stop();
+                source.stop();
+            }
+        }
+
+        function exportVideo() {
+            isPlaying = false;
+            isRecording = false;
+            cancelAnimationFrame(animationId);
+            
+            const isMp4 = mediaRecorder.mimeType.includes('mp4');
+            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `HAMEG_OSC_EXPORT.${isMp4 ? 'mp4' : 'webm'}`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            recordBtn.style.display = 'block';
+            stopBtn.disabled = true;
+            statusDisplay.textContent = "DATA SAVED.";
+            
+            // Ripristina schermo base
+            ctx.drawImage(offscreenCanvas, 0, 0);
+        }
+
+        // 4. RENDERING LOOP (Ultra Ottimizzato)
+        function renderLoop() {
+            if (!isPlaying) return;
+            animationId = requestAnimationFrame(renderLoop);
+
+            analyser.getByteTimeDomainData(dataArray);
+
+            // Motion Blur tramite Alpha Compositing (Legato a manopola INTENS)
+            ctx.fillStyle = `rgba(3, 20, 8, ${params.intens})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Restore Offscreen assets usando blend modes
+            ctx.globalCompositeOperation = 'lighten';
+            ctx.drawImage(offscreenCanvas, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+
+            // Disegno Onda
+            ctx.beginPath();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = '#00ff41';
+            
+            // Controllo Focus
+            if(params.focus > 0) {
+                ctx.shadowBlur = params.focus;
+                ctx.shadowColor = '#00ff41';
+            } else {
+                ctx.shadowBlur = 0;
+            }
+
+            const sliceWidth = (canvas.width * params.timeDiv) / bufferLength;
+            let x = 0;
+            const centerY = (canvas.height / 2) + params.yPos;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                let y = ((v - 1) * params.voltsDiv) * (canvas.height / 3.5) + centerY;
+
+                // Clamping per evitare che la traccia esca dallo schermo
+                y = Math.max(0, Math.min(canvas.height, y));
+
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                x += sliceWidth;
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0; // Reset critico per le performance
+        }
+    </script>
+</body>
+</html>
